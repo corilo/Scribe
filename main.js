@@ -36,6 +36,35 @@ function createWindow() {
   if (b.maximized) win.maximize();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.on('close', saveBounds);
+
+  /* Right-click context menu (editor and panels) */
+  win.webContents.on('context-menu', (_e, params) => {
+    const items = [];
+    const selText = (params.selectionText || '').trim();
+    if (selText) {
+      const label = selText.length > 28 ? selText.slice(0, 28) + '…' : selText;
+      items.push(
+        { label: 'Explain "' + label + '"', accelerator: 'CmdOrCtrl+E', click: () => sendMenu('explain') },
+        { type: 'separator' }
+      );
+    }
+    if (params.isEditable) {
+      items.push(
+        { role: 'undo' }, { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut', enabled: !!selText },
+        { role: 'copy', enabled: !!selText },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle', label: 'Paste as Plain Text' },
+        { role: 'delete', enabled: !!selText },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      );
+    } else if (selText) {
+      items.push({ role: 'copy' });
+    }
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: win });
+  });
 }
 
 /* ---------------- Application menu ---------------- */

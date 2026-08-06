@@ -416,6 +416,21 @@ panelBody.addEventListener('click', e => {
   if (b) speak(decodeURIComponent(b.dataset.say), b.dataset.lang);
 });
 
+/* Live Explain: while the panel is open, a new selection in the editor
+   refreshes it automatically — no need to press Explain again. */
+let lastExplained = '';
+let autoExplainTimer = null;
+document.addEventListener('selectionchange', () => {
+  clearTimeout(autoExplainTimer);
+  if (panel.classList.contains('hidden')) return;
+  const sel = window.getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return;
+  if (!editor.contains(sel.getRangeAt(0).commonAncestorContainer)) return;
+  const text = sel.toString().trim();
+  if (!text || text === lastExplained) return;
+  autoExplainTimer = setTimeout(() => explainSelection(), 600);
+});
+
 /* ---------------- Explain panel ---------------- */
 function card(title, inner) {
   return '<div class="card"><h4>' + esc(title) + '</h4>' + inner + '</div>';
@@ -429,6 +444,7 @@ async function explainSelection() {
   const sel = window.getSelection();
   const text = (sel && sel.toString().trim()) || '';
   if (!text) { alert('Select a word or sentence first, then press Explain.'); return; }
+  lastExplained = text;
   floatbtn.classList.add('hidden');
   panel.classList.remove('hidden');
   const lang = detectLang(text);
