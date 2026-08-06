@@ -89,6 +89,11 @@ APIs are CORS-friendly). Files open and save through the browser's file
 pickers (File System Access API on Chrome/Edge, download/upload fallback
 elsewhere).
 
+Works on phones and tablets too: the layout is responsive (scrollable
+toolbar, bottom-sheet Explain panel), and on touch screens hover lookup
+becomes **tap lookup** — tap any word for its definition, long-press to
+select and Explain.
+
 ```bash
 npm run build:web   # outputs a static site to dist/
 ```

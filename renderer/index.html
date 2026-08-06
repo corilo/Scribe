@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; connect-src https://www.sefaria.org https://api.dictionaryapi.dev https://api.mymemory.translated.net https://en.wiktionary.org; img-src 'self' data:;">
 <title>Scribe — English/Hebrew Word Processor</title>
 <link rel="stylesheet" href="styles.css">
@@ -100,7 +101,7 @@
       <label class="toggle" title="Show definitions when hovering words">
         <input type="checkbox" id="chk-hover" checked>
         <span class="toggle-track"><span class="toggle-thumb"></span></span>
-        Hover lookup
+        <span id="lookup-label">Hover lookup</span>
       </label>
     </div>
     <div class="tb-spacer"></div>
@@ -173,6 +174,12 @@
           <tr><td>Select + <b>Explain</b></td><td>Roots, etymology, transliteration and full dictionary entries</td></tr>
           <tr><td>Select a single Hebrew letter</td><td>Letter name, sound and numeric value (gematria)</td></tr>
           <tr><td>🔊 buttons</td><td>Pronounce words out loud (uses your system's voices)</td></tr>
+        </table>
+        <h4>Touch screens (phone / tablet)</h4>
+        <table>
+          <tr><td>Tap a word</td><td>Definition tooltip</td></tr>
+          <tr><td>Long-press</td><td>Select text, then tap <b>🔍 Explain</b> for roots, transliteration and translation</td></tr>
+          <tr><td>Select a sentence</td><td>Explain includes the full translation</td></tr>
         </table>
         <h4>Tips</h4>
         <table>

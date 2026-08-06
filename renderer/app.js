@@ -421,6 +421,28 @@ editor.addEventListener('keydown', e => {
   if (!['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) hideTooltip();
 });
 
+/* ---------------- Touch screens: tap a word to look it up ---------------- */
+const isTouch = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+if (isTouch) {
+  document.getElementById('lookup-label').textContent = 'Tap lookup';
+  editor.addEventListener('touchend', e => {
+    if (!chkHover.checked) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    // Wait for the tap to settle (caret placement / selection), then decide
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return; // user is selecting → Explain flow
+      hoverLookup(t.clientX, t.clientY, false);
+    }, 80);
+  }, { passive: true });
+  // Tapping outside the editor, or scrolling, dismisses the tooltip
+  document.addEventListener('touchstart', e => {
+    if (!editor.contains(e.target)) hideTooltip();
+  }, { passive: true });
+  document.getElementById('editor-wrap').addEventListener('scroll', hideTooltip, { passive: true });
+}
+
 /* ---------------- Selection → floating Explain button ---------------- */
 document.addEventListener('selectionchange', () => {
   const sel = window.getSelection();

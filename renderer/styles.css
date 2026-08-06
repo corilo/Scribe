@@ -298,3 +298,36 @@ body {
 .letter-big { font-family: var(--heb-font); font-size: 46px; line-height: 1.15; }
 
 .hidden { display: none !important; }
+
+/* ---------------- Mobile (phones / small tablets) ---------------- */
+@media (max-width: 700px) {
+  /* Toolbar: one scrollable row instead of wrapping into many */
+  #toolbar {
+    flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding: 6px 8px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  }
+  #toolbar::-webkit-scrollbar { display: none; }
+  .tb-group { padding: 0 4px; flex-shrink: 0; }
+  .toggle { white-space: nowrap; }
+  /* iOS zooms into controls with font-size < 16px — avoid that */
+  #toolbar select { font-size: 16px; max-width: 116px; }
+
+  #editor-wrap { padding: 10px 6px; }
+  #editor {
+    padding: 20px 16px; min-height: 70vh;
+    font-size: 16px; border-radius: 4px;
+  }
+
+  /* Explain panel becomes a bottom sheet */
+  #panel {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: 100%; min-width: 0; height: 62vh; z-index: 60;
+    border-left: none; border-radius: 14px 14px 0 0; overflow: hidden;
+    box-shadow: 0 -8px 30px rgba(0,0,0,.35);
+  }
+  #panel-body { padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+
+  #tooltip { max-width: 92vw; }
+  #help-modal { max-width: 96vw; max-height: 88vh; }
+  #statusbar { padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+}
