@@ -1,0 +1,38 @@
+{
+  "name": "scribe",
+  "productName": "Scribe",
+  "version": "1.0.0",
+  "description": "A bilingual Hebrew-English word processor with instant definitions, etymology and word-root lookup.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "keywords": [
+    "hebrew",
+    "english",
+    "bilingual",
+    "word-processor",
+    "editor",
+    "dictionary",
+    "etymology",
+    "rtl",
+    "electron",
+    "sefaria"
+  ],
+  "author": "Yuri Corilo",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/scribe.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YOUR_GITHUB_USERNAME/scribe/issues"
+  },
+  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/scribe#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^43.3.0"
+  }
+}
