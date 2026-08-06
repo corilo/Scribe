@@ -51,9 +51,16 @@ Klein, BDB, Strong's and Jastrow included.
 - Light and dark themes with a one-click toggle. Your choice is remembered
   between sessions; first launch follows your system preference.
 
-**Files**
+**Files & session**
 
 - Open and save documents as formatted HTML or plain text.
+- Your session survives restarts: the document, the file it belongs to,
+  unsaved edits and settings are all restored on launch.
+  - Desktop: Save writes straight back to the original file; window size and
+    position are remembered too.
+  - Web: file access is remembered via the File System Access API — the
+    browser re-confirms permission once, then Save writes back to the same
+    file on disk (Chrome/Edge; other browsers fall back to download).
 
 ---
 
@@ -62,8 +69,8 @@ Klein, BDB, Strong's and Jastrow included.
 Requires [Node.js](https://nodejs.org) 18 or newer.
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/scribe.git
-cd scribe
+git clone https://github.com/corilo/Scribe.git
+cd Scribe
 npm install
 npm start
 ```
@@ -125,13 +132,16 @@ words. Works with no internet connection.
 ## Project structure
 
 ```
-scribe/
+Scribe/
 ├── main.js              Electron main process, window and native menus
 ├── preload.js           Secure IPC bridge for file operations
-└── renderer/
+├── build-web.js         Builds the static web version into dist/
+├── web/
+│   └── web-shim.js      Browser fileAPI (replaces the Electron preload)
+└── renderer/            Shared by the desktop and web apps
     ├── index.html       Toolbar, editor, side panel, status bar
     ├── styles.css       Themeable styling (light/dark CSS variables)
-    ├── app.js           Editor logic, formatting, hover and Explain panel
+    ├── app.js           Editor logic, formatting, hover, session restore
     ├── dictionary.js    Built-in offline Hebrew/English dictionary
     └── lookup.js        Online lexicon, translation and etymology clients
 ```
