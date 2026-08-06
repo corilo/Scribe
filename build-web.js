@@ -10,7 +10,8 @@ const path = require('path');
 const ROOT = __dirname;
 const DIST = path.join(ROOT, 'dist');
 
-fs.rmSync(DIST, { recursive: true, force: true });
+// Best-effort clean; fall back to overwriting if deletion isn't permitted
+try { fs.rmSync(DIST, { recursive: true, force: true }); } catch (e) {}
 fs.mkdirSync(DIST, { recursive: true });
 
 // 1. Copy every renderer file

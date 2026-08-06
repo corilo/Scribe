@@ -14,6 +14,26 @@ const chkHover = document.getElementById('chk-hover');
 let currentFile = null;
 let dirty = false;
 
+/* ---------------- Session persistence ----------------
+   The document, the file it belongs to, and settings survive restarts.
+   Works identically in Electron (localStorage lives in the app profile)
+   and in the browser. */
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  del(k) { try { localStorage.removeItem(k); } catch (e) {} }
+};
+let persistTimer = null;
+function persistDoc(now) {
+  clearTimeout(persistTimer);
+  const write = () => store.set('scribe-doc', { html: editor.innerHTML, file: currentFile, dirty });
+  if (now) write(); else persistTimer = setTimeout(write, 400);
+}
+function persistPrefs() {
+  store.set('scribe-prefs', { hover: chkHover.checked });
+}
+window.addEventListener('beforeunload', () => persistDoc(true));
+
 const WORD_RE = /[֐-׿ְ-ׇ'׳״]+|[A-Za-z][A-Za-z'’-]*/;
 
 function esc(s) {
@@ -95,6 +115,7 @@ editor.addEventListener('input', () => {
     .forEach(el => el.setAttribute('dir', 'auto'));
   dirty = true;
   updateStatus();
+  persistDoc();
 });
 
 /* ---------------- Status bar ---------------- */
@@ -115,6 +136,20 @@ function updateStatus() {
   }
 }
 document.addEventListener('selectionchange', updateStatus);
+
+/* ---------------- Restore previous session ---------------- */
+(function restoreSession() {
+  const prefs = store.get('scribe-prefs');
+  if (prefs && typeof prefs.hover === 'boolean') chkHover.checked = prefs.hover;
+  const d = store.get('scribe-doc');
+  if (d && typeof d.html === 'string' && d.html.trim()) {
+    editor.innerHTML = d.html;
+    currentFile = d.file || null;
+    dirty = !!d.dirty;
+    stFile.textContent = currentFile ? currentFile.split(/[\\/]/).pop() : 'Untitled';
+  }
+})();
+chkHover.addEventListener('change', persistPrefs);
 updateStatus();
 
 /* ---------------- File operations ---------------- */
@@ -140,6 +175,7 @@ async function doOpen() {
   dirty = false;
   stFile.textContent = r.filePath.split(/[\\/]/).pop();
   updateStatus();
+  persistDoc(true);
 }
 async function doSave(as) {
   const isTxt = currentFile && /\.txt$/i.test(currentFile);
@@ -152,6 +188,7 @@ async function doSave(as) {
   dirty = false;
   stFile.textContent = r.filePath.split(/[\\/]/).pop();
   updateStatus();
+  persistDoc(true);
 }
 function doNew() {
   if (dirty && !confirm('Discard unsaved changes?')) return;
@@ -159,6 +196,7 @@ function doNew() {
   currentFile = null; dirty = false;
   stFile.textContent = 'Untitled';
   updateStatus();
+  persistDoc(true);
 }
 document.getElementById('btn-new').onclick = doNew;
 document.getElementById('btn-open').onclick = doOpen;

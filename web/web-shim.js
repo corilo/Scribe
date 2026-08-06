@@ -19,11 +19,39 @@
 
   const hasFS = 'showOpenFilePicker' in window && 'showSaveFilePicker' in window;
 
+  /* File handles survive reloads via IndexedDB, so "Save" can write back to
+     the same file in the next session (browser re-asks permission once). */
+  function idb() {
+    return new Promise((res, rej) => {
+      const r = indexedDB.open('scribe-files', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('handles');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  async function putHandle(name, h) {
+    try {
+      const db = await idb();
+      db.transaction('handles', 'readwrite').objectStore('handles').put(h, name);
+    } catch (e) {}
+  }
+  async function getHandle(name) {
+    try {
+      const db = await idb();
+      return await new Promise(res => {
+        const rq = db.transaction('handles').objectStore('handles').get(name);
+        rq.onsuccess = () => res(rq.result || null);
+        rq.onerror = () => res(null);
+      });
+    } catch (e) { return null; }
+  }
+
   async function pickerOpen() {
     try {
       const [h] = await window.showOpenFilePicker({ types: HTML_TYPES });
       const file = await h.getFile();
       handle = h; handleName = file.name;
+      putHandle(file.name, h);
       return { filePath: file.name, content: await file.text() };
     } catch (e) {
       if (e && e.name === 'AbortError') return null; // user cancelled
@@ -70,6 +98,7 @@
       });
       await writeHandle(h, content);
       handle = h; handleName = h.name;
+      putHandle(h.name, h);
       return { filePath: h.name };
     } catch (e) {
       if (e && e.name === 'AbortError') return null;
@@ -81,10 +110,20 @@
     open: () => (hasFS ? pickerOpen() : inputOpen()),
 
     save: async (filePath, content) => {
-      // Re-save to the opened file when we still hold its handle
-      if (hasFS && handle && filePath === handleName) {
-        await writeHandle(handle, content);
-        return { filePath: handleName };
+      if (hasFS && filePath) {
+        // Recover the handle from a previous session if we lost it to a reload
+        if (!handle || filePath !== handleName) {
+          const h = await getHandle(filePath);
+          if (h) { handle = h; handleName = filePath; }
+        }
+        if (handle && filePath === handleName) {
+          try {
+            if ((await handle.requestPermission({ mode: 'readwrite' })) === 'granted') {
+              await writeHandle(handle, content);
+              return { filePath: handleName };
+            }
+          } catch (e) { /* fall through to Save As */ }
+        }
       }
       if (hasFS) return pickerSaveAs(content, filePath || 'document.html');
       download(content, filePath || 'document.html');

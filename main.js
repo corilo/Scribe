@@ -4,10 +4,26 @@ const path = require('path');
 
 let win;
 
+/* Remember window size/position between runs */
+const boundsFile = () => path.join(app.getPath('userData'), 'window-bounds.json');
+function loadBounds() {
+  try { return JSON.parse(fs.readFileSync(boundsFile(), 'utf-8')); } catch (e) { return {}; }
+}
+function saveBounds() {
+  if (!win || win.isDestroyed()) return;
+  try {
+    fs.writeFileSync(boundsFile(), JSON.stringify({
+      ...win.getNormalBounds(), maximized: win.isMaximized()
+    }));
+  } catch (e) {}
+}
+
 function createWindow() {
+  const b = loadBounds();
   win = new BrowserWindow({
-    width: 1440,
-    height: 920,
+    width: b.width || 1440,
+    height: b.height || 920,
+    ...(Number.isFinite(b.x) && Number.isFinite(b.y) ? { x: b.x, y: b.y } : {}),
     title: 'Scribe — English/Hebrew Word Processor',
     icon: path.join(__dirname, 'renderer', 'icon.png'),
     backgroundColor: '#f2efe9',
@@ -17,7 +33,9 @@ function createWindow() {
       nodeIntegration: false
     }
   });
+  if (b.maximized) win.maximize();
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.on('close', saveBounds);
 }
 
 /* ---------------- Application menu ---------------- */
