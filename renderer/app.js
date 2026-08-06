@@ -339,59 +339,87 @@ function tooltipHtml(r, extraNote) {
   return h;
 }
 
-editor.addEventListener('mousemove', e => {
-  if (!chkHover.checked) return;
-  clearTimeout(hoverTimer);
-  hoverTimer = setTimeout(async () => {
-    if (e.shiftKey) {
-      // Sentence translation mode
-      const sentence = sentenceAtPoint(e.clientX, e.clientY);
-      if (!sentence) { hideTooltip(); return; }
-      const key = 'S:' + sentence;
-      if (key === lastHoverKey) return;
-      lastHoverKey = key;
-      const lang = detectLang(sentence);
-      tooltip.innerHTML = '<div class="tt-loading">Translating sentence…</div>';
-      tooltip.classList.remove('hidden');
-      placeTooltip(e.clientX, e.clientY);
-      const t = await translateText(sentence, lang, lang === 'he' ? 'en' : 'he');
-      if (lastHoverKey !== key) return;
-      tooltip.innerHTML = t
-        ? '<span class="tt-word' + (lang === 'he' ? ' he' : '') + '">' + esc(sentence.slice(0, 120)) + '</span>' +
-          '<div class="tt-def"' + (lang === 'en' ? ' dir="rtl" style="font-family:var(--heb-font);font-size:15px"' : '') + '>' +
-          esc(t) + '</div><div class="tt-src">Sentence translation · MyMemory</div>'
-        : '<div class="tt-def">Could not translate sentence.</div>';
-      placeTooltip(e.clientX, e.clientY);
-      return;
-    }
-    const w = wordAtPoint(e.clientX, e.clientY);
-    if (!w) { hideTooltip(); return; }
-    const key = 'W:' + w.word;
+async function hoverLookup(x, y, shift) {
+  if (shift) {
+    // Sentence translation mode
+    const sentence = sentenceAtPoint(x, y);
+    if (!sentence) { hideTooltip(); return; }
+    const key = 'S:' + sentence;
     if (key === lastHoverKey) return;
     lastHoverKey = key;
-    const lang = detectLang(w.word);
-    const builtin = builtinLookup(w.word, lang);
-    if (builtin) {
-      tooltip.innerHTML = tooltipHtml({
-        word: builtin.he || w.word, translit: builtin.translit, pos: builtin.pos,
-        defs: builtin.meaning.slice(0, 3), source: 'Built-in dictionary', lang
-      });
-      tooltip.classList.remove('hidden');
-      placeTooltip(e.clientX, e.clientY);
-      return;
-    }
-    tooltip.innerHTML = '<span class="tt-word' + (lang === 'he' ? ' he' : '') + '">' +
-      esc(w.word) + '</span><div class="tt-loading">Looking up…</div>';
+    const lang = detectLang(sentence);
+    tooltip.innerHTML = '<div class="tt-loading">Translating sentence…</div>';
     tooltip.classList.remove('hidden');
-    placeTooltip(e.clientX, e.clientY);
-    const r = await quickLookup(w.word, lang);
+    placeTooltip(x, y);
+    const t = await translateText(sentence, lang, lang === 'he' ? 'en' : 'he');
     if (lastHoverKey !== key) return;
-    tooltip.innerHTML = tooltipHtml(r, 'Not found online');
-    placeTooltip(e.clientX, e.clientY);
-  }, 350);
+    tooltip.innerHTML = t
+      ? '<span class="tt-word' + (lang === 'he' ? ' he' : '') + '">' + esc(sentence.slice(0, 120)) + '</span>' +
+        '<div class="tt-def"' + (lang === 'en' ? ' dir="rtl" style="font-family:var(--heb-font);font-size:15px"' : '') + '>' +
+        esc(t) + '</div><div class="tt-src">Sentence translation · MyMemory</div>'
+      : '<div class="tt-def">Could not translate sentence.</div>';
+    placeTooltip(x, y);
+    return;
+  }
+  const w = wordAtPoint(x, y);
+  if (!w) { hideTooltip(); return; }
+  const key = 'W:' + w.word;
+  if (key === lastHoverKey) return;
+  lastHoverKey = key;
+  const lang = detectLang(w.word);
+  const builtin = builtinLookup(w.word, lang);
+  if (builtin) {
+    tooltip.innerHTML = tooltipHtml({
+      word: builtin.he || w.word, translit: builtin.translit, pos: builtin.pos,
+      defs: builtin.meaning.slice(0, 3), source: 'Built-in dictionary', lang
+    });
+    tooltip.classList.remove('hidden');
+    placeTooltip(x, y);
+    return;
+  }
+  tooltip.innerHTML = '<span class="tt-word' + (lang === 'he' ? ' he' : '') + '">' +
+    esc(w.word) + '</span><div class="tt-loading">Looking up…</div>';
+  tooltip.classList.remove('hidden');
+  placeTooltip(x, y);
+  const r = await quickLookup(w.word, lang);
+  if (lastHoverKey !== key) return;
+  tooltip.innerHTML = tooltipHtml(r, 'Not found online');
+  placeTooltip(x, y);
+}
+
+const lastMouse = { x: -1, y: -1, inside: false };
+editor.addEventListener('mousemove', e => {
+  lastMouse.x = e.clientX; lastMouse.y = e.clientY; lastMouse.inside = true;
+  if (!chkHover.checked) return;
+  clearTimeout(hoverTimer);
+  // Shorter delay in sentence mode; same-sentence moves are a no-op anyway
+  hoverTimer = setTimeout(() => hoverLookup(e.clientX, e.clientY, e.shiftKey),
+    e.shiftKey ? 150 : 350);
 });
-editor.addEventListener('mouseleave', () => { clearTimeout(hoverTimer); hideTooltip(); });
-editor.addEventListener('keydown', hideTooltip);
+editor.addEventListener('mouseleave', () => {
+  lastMouse.inside = false;
+  clearTimeout(hoverTimer); hideTooltip();
+});
+
+/* Pressing Shift translates the sentence under the cursor immediately —
+   no mouse movement needed. Releasing Shift returns to word mode. */
+document.addEventListener('keydown', e => {
+  if (e.key === 'Shift' && !e.repeat && chkHover.checked && lastMouse.inside) {
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => hoverLookup(lastMouse.x, lastMouse.y, true), 120);
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'Shift' && lastHoverKey.startsWith('S:')) {
+    clearTimeout(hoverTimer);
+    hideTooltip();
+  }
+});
+
+/* Typing hides the tooltip — but modifier keys alone (Shift, Ctrl…) don't */
+editor.addEventListener('keydown', e => {
+  if (!['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) hideTooltip();
+});
 
 /* ---------------- Selection → floating Explain button ---------------- */
 document.addEventListener('selectionchange', () => {
