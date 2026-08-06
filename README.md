@@ -35,6 +35,13 @@ Klein, BDB, Strong's and Jastrow included.
   - **English** — full definitions with examples and synonyms, Wiktionary
     etymology, and Hebrew translation.
   - **Sentences** — full translation plus a word-by-word gloss.
+- **Transliteration** — Hebrew selections get a nikud-based transliteration
+  (word-by-word for sentences).
+- **Pronunciation** — 🔊 buttons speak words and sentences out loud using your
+  system's voices (Hebrew and English).
+- **Letters** — select a single Hebrew letter to see its name, sound, numeric
+  value (gematria) and final form.
+- Built-in Help (<kbd>F1</kbd> or the ? button) lists every shortcut and tip.
 - Hover lookup can be toggled off from the toolbar while you type.
 
 **Formatting**
@@ -109,6 +116,7 @@ Deploy `dist/` to any static host:
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Explain selection |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | Bold / Italic / Underline |
 | <kbd>Shift</kbd> + hover | Translate the sentence under the cursor |
+| <kbd>F1</kbd> | Help — shortcuts & tips |
 
 ---
 

@@ -94,6 +94,46 @@ applyTheme(
 document.getElementById('btn-theme').onclick = () =>
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 
+/* ---------------- Help modal ---------------- */
+const helpOverlay = document.getElementById('help-overlay');
+function toggleHelp(show) {
+  helpOverlay.classList.toggle('hidden', show === undefined ? undefined : !show);
+}
+document.getElementById('btn-help').onclick = () => toggleHelp();
+document.getElementById('help-close').onclick = () => toggleHelp(false);
+helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) toggleHelp(false); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') toggleHelp(false);
+});
+
+/* ---------------- Pronunciation (Web Speech API) ---------------- */
+let _voices = [];
+if ('speechSynthesis' in window) {
+  _voices = speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => { _voices = speechSynthesis.getVoices(); };
+}
+let warnedNoHeVoice = false;
+function speak(text, lang) {
+  if (!('speechSynthesis' in window)) { alert('Speech is not available on this system.'); return; }
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const pref = lang === 'he' ? 'he' : 'en';
+  const v = _voices.find(v => v.lang && v.lang.toLowerCase().startsWith(pref));
+  if (v) u.voice = v;
+  else if (pref === 'he' && !warnedNoHeVoice) {
+    warnedNoHeVoice = true;
+    alert('No Hebrew voice found on this system — pronunciation may be wrong or silent.\n' +
+      'On Windows: Settings → Time & Language → Speech → Add voices → Hebrew.');
+  }
+  u.lang = pref === 'he' ? 'he-IL' : 'en-US';
+  u.rate = 0.85;
+  speechSynthesis.speak(u);
+}
+function speakBtn(text, lang) {
+  return '<button class="speak" title="Pronounce" data-lang="' + lang +
+    '" data-say="' + encodeURIComponent(text) + '">🔊</button>';
+}
+
 function setParagraphDir(dir) {
   const sel = window.getSelection();
   if (!sel.rangeCount) return;
@@ -210,6 +250,7 @@ if (window.fileAPI.onMenu) {
     else if (action === 'save') doSave(false);
     else if (action === 'saveAs') doSave(true);
     else if (action === 'explain') explainSelection();
+    else if (action === 'help') toggleHelp();
   });
 }
 
@@ -369,6 +410,12 @@ floatbtn.onclick = () => explainSelection();
 document.getElementById('btn-explain').onclick = () => explainSelection();
 document.getElementById('panel-close').onclick = () => panel.classList.add('hidden');
 
+/* Pronounce buttons inside the panel (built from HTML strings → delegate) */
+panelBody.addEventListener('click', e => {
+  const b = e.target.closest('.speak');
+  if (b) speak(decodeURIComponent(b.dataset.say), b.dataset.lang);
+});
+
 /* ---------------- Explain panel ---------------- */
 function card(title, inner) {
   return '<div class="card"><h4>' + esc(title) + '</h4>' + inner + '</div>';
@@ -393,11 +440,49 @@ async function explainSelection() {
 
   const sections = [];
 
-  // Header card
+  // Header card (with pronunciation)
   const heCls = lang === 'he' ? ' he' : '';
-  sections.push('<div class="card"><div class="hw' + heCls + '">' + esc(headWord) + '</div>' +
+  sections.push('<div class="card"><div class="hw' + heCls + '">' + esc(headWord) +
+    speakBtn(text, lang) + '</div>' +
     '<div class="meta">' + (lang === 'he' ? 'Hebrew · עברית' : 'English') +
     (isSingleWord ? '' : ' · ' + words.length + ' words') + '</div></div>');
+
+  // Hebrew letter card — selecting a single letter explains it
+  if (lang === 'he') {
+    const bare = stripNikud(headWord);
+    if (bare.length === 1 && HEB_LETTERS[bare]) {
+      const L = HEB_LETTERS[bare];
+      let inner = '<div class="letter-big">' + esc(bare) + '</div>' +
+        '<div class="meta"><b>' + esc(L.name) + '</b> · sound: ' + esc(L.sound) +
+        ' · gematria: ' + L.gematria + '</div>';
+      if (L.final) inner += '<div class="panel-note">Final form (used at the end of a word): ' +
+        '<span class="letter-big" style="font-size:24px">' + esc(L.final) + '</span></div>';
+      if (L.finalOf) inner += '<div class="panel-note">This is the final form of ' +
+        '<span class="letter-big" style="font-size:24px">' + esc(L.finalOf) + '</span>' +
+        ', used at the end of a word.</div>';
+      sections.push(card('Hebrew letter', inner));
+    }
+  }
+
+  // Transliteration card (Hebrew selections)
+  if (lang === 'he') {
+    const pointed = hasNikud(text);
+    const note = pointed ? '' :
+      '<div class="panel-note">No nikud (vowel points) in this text — consonants only. ' +
+      'Pointed text gives a full transliteration.</div>';
+    if (isSingleWord) {
+      const t = hebTranslit(headWord);
+      if (t) sections.push(card('Transliteration',
+        '<div class="translit-big">' + esc(t) + '</div>' + speakBtn(headWord, 'he') + note));
+    } else {
+      const items = words.filter(w => detectLang(w) === 'he').slice(0, 20).map(w => {
+        const t = hebTranslit(w);
+        return '<li><b style="font-family:var(--heb-font);font-size:16px">' + esc(w) + '</b>' +
+          (t ? ' — <i>' + esc(t) + '</i>' : '') + speakBtn(w, 'he') + '</li>';
+      });
+      if (items.length) sections.push(card('Transliteration', '<ol>' + items.join('') + '</ol>' + note));
+    }
+  }
 
   // 1. Built-in entry (single word)
   if (isSingleWord) {
@@ -481,6 +566,8 @@ async function explainSelection() {
     jobs.push(translateText(headWord, 'en', 'he').then(t =>
       t ? card('Hebrew translation',
         '<div class="trans-text" dir="rtl" style="font-family:var(--heb-font);font-size:20px">' + esc(t) + '</div>' +
+        (hebTranslit(t) ? '<div class="translit-big">' + esc(hebTranslit(t)) + '</div>' : '') +
+        speakBtn(t, 'he') +
         '<div class="attribution">MyMemory Translation</div>') : ''));
   } else {
     // Phrase / sentence: translate + per-word gloss
@@ -496,7 +583,7 @@ async function explainSelection() {
       const gloss = r && r.defs && r.defs.length ? r.defs[0] : '—';
       return '<li><b' + (wl === 'he' ? ' style="font-family:var(--heb-font);font-size:16px"' : '') + '>' +
         esc(w) + '</b>' + (r && r.translit ? ' <i>(' + esc(r.translit) + ')</i>' : '') +
-        ' — ' + esc(gloss) + '</li>';
+        ' — ' + esc(gloss) + speakBtn(w, wl) + '</li>';
     })).then(items => card('Word-by-word gloss',
       '<ol>' + items.join('') + '</ol>' +
       (words.length > 12 ? '<div class="panel-note">First 12 words shown.</div>' : ''))));

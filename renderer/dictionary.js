@@ -399,3 +399,98 @@ function builtinLookup(word, lang) {
   if (BUILTIN_EN[lower]) return { ...BUILTIN_EN[lower], key: lower, lang: 'en' };
   return null;
 }
+
+/* ---------------- Hebrew alphabet (letter explanations) ---------------- */
+const HEB_LETTERS = {
+  'א': { name: 'Alef',   sound: 'silent (glottal stop)', gematria: 1 },
+  'ב': { name: 'Bet',    sound: 'b (with dagesh) / v',   gematria: 2 },
+  'ג': { name: 'Gimel',  sound: 'g',                     gematria: 3 },
+  'ד': { name: 'Dalet',  sound: 'd',                     gematria: 4 },
+  'ה': { name: 'He',     sound: 'h',                     gematria: 5 },
+  'ו': { name: 'Vav',    sound: 'v (also vowels o/u)',   gematria: 6 },
+  'ז': { name: 'Zayin',  sound: 'z',                     gematria: 7 },
+  'ח': { name: 'Chet',   sound: 'ch (as in Bach)',       gematria: 8 },
+  'ט': { name: 'Tet',    sound: 't',                     gematria: 9 },
+  'י': { name: 'Yod',    sound: 'y (also vowel i/e)',    gematria: 10 },
+  'כ': { name: 'Kaf',    sound: 'k (with dagesh) / kh',  gematria: 20, final: 'ך' },
+  'ך': { name: 'Kaf (final)',   sound: 'kh', gematria: 20, finalOf: 'כ' },
+  'ל': { name: 'Lamed',  sound: 'l',                     gematria: 30 },
+  'מ': { name: 'Mem',    sound: 'm',                     gematria: 40, final: 'ם' },
+  'ם': { name: 'Mem (final)',   sound: 'm',  gematria: 40, finalOf: 'מ' },
+  'נ': { name: 'Nun',    sound: 'n',                     gematria: 50, final: 'ן' },
+  'ן': { name: 'Nun (final)',   sound: 'n',  gematria: 50, finalOf: 'נ' },
+  'ס': { name: 'Samekh', sound: 's',                     gematria: 60 },
+  'ע': { name: 'Ayin',   sound: 'silent (guttural)',     gematria: 70 },
+  'פ': { name: 'Pe',     sound: 'p (with dagesh) / f',   gematria: 80, final: 'ף' },
+  'ף': { name: 'Pe (final)',    sound: 'f',  gematria: 80, finalOf: 'פ' },
+  'צ': { name: 'Tsadi',  sound: 'ts',                    gematria: 90, final: 'ץ' },
+  'ץ': { name: 'Tsadi (final)', sound: 'ts', gematria: 90, finalOf: 'צ' },
+  'ק': { name: 'Qof',    sound: 'k',                     gematria: 100 },
+  'ר': { name: 'Resh',   sound: 'r',                     gematria: 200 },
+  'ש': { name: 'Shin / Sin', sound: 'sh (dot right) / s (dot left)', gematria: 300 },
+  'ת': { name: 'Tav',    sound: 't',                     gematria: 400 }
+};
+
+/* ---------------- Nikud-based transliteration ---------------- */
+const HEB_CONS_TR = {
+  'א': '', 'ב': 'v', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ו': 'v', 'ז': 'z',
+  'ח': 'ch', 'ט': 't', 'י': 'y', 'כ': 'kh', 'ך': 'kh', 'ל': 'l',
+  'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's', 'ע': '', 'פ': 'f',
+  'ף': 'f', 'צ': 'ts', 'ץ': 'ts', 'ק': 'k', 'ר': 'r', 'ש': 'sh', 'ת': 't'
+};
+const HEB_VOWEL_TR = {
+  'ְ': 'e',  // sheva
+  'ֱ': 'e',  // hataf segol
+  'ֲ': 'a',  // hataf patach
+  'ֳ': 'o',  // hataf kamatz
+  'ִ': 'i',  // chirik
+  'ֵ': 'e',  // tzere
+  'ֶ': 'e',  // segol
+  'ַ': 'a',  // patach
+  'ָ': 'a',  // kamatz
+  'ֹ': 'o',  // cholam
+  'ֺ': 'o',  // cholam haser for vav
+  'ֻ': 'u',  // kubutz
+  'ׇ': 'o'   // kamatz katan
+};
+
+function hasNikud(s) { return /[ְ-ׇֻ]/.test(s); }
+
+function hebTranslit(word) {
+  const s = String(word).normalize('NFC');
+  const letters = [];
+  for (const ch of s) {
+    if (HEB_CONS_TR.hasOwnProperty(ch)) letters.push({ c: ch, marks: [] });
+    else if (letters.length && /[֑-ׇ]/.test(ch)) letters[letters.length - 1].marks.push(ch);
+  }
+  let out = '';
+  for (let i = 0; i < letters.length; i++) {
+    const L = letters[i];
+    if (L.skip) continue;
+    const { c, marks } = L;
+    const dagesh = marks.includes('ּ');
+    let cons = HEB_CONS_TR[c];
+    if (c === 'ב') cons = dagesh ? 'b' : 'v';
+    else if (c === 'כ' || c === 'ך') cons = dagesh ? 'k' : 'kh';
+    else if (c === 'פ' || c === 'ף') cons = dagesh ? 'p' : 'f';
+    else if (c === 'ש') cons = marks.includes('ׂ') ? 's' : 'sh';
+    else if (c === 'ו') {
+      if (marks.includes('ֹ') || marks.includes('ֺ')) { out += 'o'; continue; } // cholam vav
+      if (dagesh && !marks.some(m => HEB_VOWEL_TR[m])) { out += 'u'; continue; }          // shuruk
+    }
+    let vowel = '';
+    for (const m of marks) if (HEB_VOWEL_TR[m]) { vowel = HEB_VOWEL_TR[m]; break; }
+    // silent sheva at the end of a word
+    if (vowel === 'e' && marks.includes('ְ') && i === letters.length - 1) vowel = '';
+    // mater lectionis: chirik/tzere + final unpointed yod → long vowel, silent yod
+    const next = letters[i + 1];
+    if (vowel && next && next.c === 'י' && !next.marks.some(m => HEB_VOWEL_TR[m]) &&
+        (vowel === 'i' || vowel === 'e')) next.skip = true;
+    // final unpointed he after a vowel is silent
+    if (next && next.c === 'ה' && !next.marks.length && i + 1 === letters.length - 1 && vowel) next.skip = true;
+    // glottal letters between vowels keep a light separator
+    if ((c === 'א' || c === 'ע') && out && vowel) cons = "'";
+    out += cons + vowel;
+  }
+  return out;
+}

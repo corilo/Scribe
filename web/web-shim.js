@@ -140,6 +140,7 @@
     // same keyboard shortcuts ourselves.
     onMenu: (cb) => {
       document.addEventListener('keydown', e => {
+        if (e.key === 'F1') { e.preventDefault(); cb('help'); return; }
         if (!(e.ctrlKey || e.metaKey)) return;
         const k = e.key.toLowerCase();
         let action = null;

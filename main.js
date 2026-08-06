@@ -83,6 +83,8 @@ function buildMenu() {
     {
       label: 'Help',
       submenu: [
+        { label: 'Shortcuts && Tips', accelerator: 'F1', click: () => sendMenu('help') },
+        { type: 'separator' },
         {
           label: 'About Scribe',
           click: () => {
