@@ -57,7 +57,7 @@ Klein, BDB, Strong's and Jastrow included.
 
 ---
 
-## Install
+## Install (desktop app)
 
 Requires [Node.js](https://nodejs.org) 18 or newer.
 
@@ -67,6 +67,27 @@ cd scribe
 npm install
 npm start
 ```
+
+## Web version
+
+The same editor also runs in the browser — no backend needed (all dictionary
+APIs are CORS-friendly). Files open and save through the browser's file
+pickers (File System Access API on Chrome/Edge, download/upload fallback
+elsewhere).
+
+```bash
+npm run build:web   # outputs a static site to dist/
+```
+
+Deploy `dist/` to any static host:
+
+- **Cloudflare Pages** (recommended) — connect the GitHub repo at
+  [pages.cloudflare.com](https://pages.cloudflare.com), set the build command
+  to `node build-web.js` and the output directory to `dist`. Every push to
+  `main` redeploys automatically.
+- **GitHub Pages** — `npx wrangler` not needed; simply publish the `dist`
+  folder (e.g. with `gh-pages` or an Actions workflow).
+- **Netlify / Vercel** — same settings: build `node build-web.js`, output `dist`.
 
 ---
 
