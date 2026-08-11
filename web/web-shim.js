@@ -109,6 +109,24 @@
   window.fileAPI = {
     open: () => (hasFS ? pickerOpen() : inputOpen()),
 
+    /* Re-open a file by name using the handle saved in IndexedDB
+       (mirrors Electron's Open Recent); falls back to the picker. */
+    openPath: async (filePath) => {
+      if (hasFS && filePath) {
+        const h = await getHandle(filePath);
+        if (h) {
+          try {
+            if ((await h.requestPermission({ mode: 'read' })) === 'granted') {
+              const file = await h.getFile();
+              handle = h; handleName = file.name;
+              return { filePath: file.name, content: await file.text() };
+            }
+          } catch (e) { /* fall through to picker */ }
+        }
+      }
+      return hasFS ? pickerOpen() : inputOpen();
+    },
+
     save: async (filePath, content) => {
       if (hasFS && filePath) {
         // Recover the handle from a previous session if we lost it to a reload

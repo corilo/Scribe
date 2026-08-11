@@ -18,6 +18,31 @@ function saveBounds() {
   } catch (e) {}
 }
 
+/* ---------------- Recently opened files ---------------- */
+const MAX_RECENTS = 10;
+const recentsFile = () => path.join(app.getPath('userData'), 'recent-files.json');
+function loadRecents() {
+  try {
+    const r = JSON.parse(fs.readFileSync(recentsFile(), 'utf-8'));
+    return Array.isArray(r) ? r.filter(p => typeof p === 'string') : [];
+  } catch (e) { return []; }
+}
+function saveRecents(list) {
+  try { fs.writeFileSync(recentsFile(), JSON.stringify(list.slice(0, MAX_RECENTS))); } catch (e) {}
+}
+function addRecent(filePath) {
+  if (!filePath) return;
+  const list = loadRecents().filter(p => p !== filePath);
+  list.unshift(filePath);
+  saveRecents(list);
+  try { app.addRecentDocument(filePath); } catch (e) {}
+  buildMenu(); // refresh Open Recent submenu
+}
+function removeRecent(filePath) {
+  saveRecents(loadRecents().filter(p => p !== filePath));
+  buildMenu();
+}
+
 function createWindow() {
   const b = loadBounds();
   win = new BrowserWindow({
@@ -68,8 +93,21 @@ function createWindow() {
 }
 
 /* ---------------- Application menu ---------------- */
-function sendMenu(action) {
-  if (win && !win.isDestroyed()) win.webContents.send('menu', action);
+function sendMenu(action, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send('menu', action, payload);
+}
+
+function recentsSubmenu() {
+  const recents = loadRecents();
+  const items = recents.map((p, i) => ({
+    label: (i < 9 ? '&' + (i + 1) + '  ' : '') + (p.length > 60 ? '…' + p.slice(-58) : p),
+    click: () => sendMenu('openRecent', p)
+  }));
+  return [
+    ...(items.length ? items : [{ label: 'No Recent Files', enabled: false }]),
+    { type: 'separator' },
+    { label: 'Clear Recently Opened', enabled: !!items.length, click: () => { saveRecents([]); buildMenu(); } }
+  ];
 }
 
 function buildMenu() {
@@ -81,6 +119,7 @@ function buildMenu() {
       submenu: [
         { label: 'New', accelerator: 'CmdOrCtrl+N', click: () => sendMenu('new') },
         { label: 'Open…', accelerator: 'CmdOrCtrl+O', click: () => sendMenu('open') },
+        { label: 'Open Recent', submenu: recentsSubmenu() },
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenu('save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenu('saveAs') },
@@ -149,21 +188,47 @@ ipcMain.handle('file:open', async () => {
   if (canceled || !filePaths.length) return null;
   const filePath = filePaths[0];
   const content = fs.readFileSync(filePath, 'utf-8');
+  addRecent(filePath);
   return { filePath, content };
 });
 
-ipcMain.handle('file:save', async (_e, { filePath, content }) => {
-  let target = filePath;
-  if (!target) {
-    const { canceled, filePath: chosen } = await dialog.showSaveDialog(win, {
-      filters: FILE_FILTERS,
-      defaultPath: 'document.html'
+/* Open a specific path (Open Recent). Removes dead entries. */
+ipcMain.handle('file:openPath', async (_e, { filePath }) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    addRecent(filePath);
+    return { filePath, content };
+  } catch (err) {
+    removeRecent(filePath);
+    dialog.showMessageBox(win, {
+      type: 'warning',
+      title: 'File not found',
+      message: 'Could not open the file.',
+      detail: filePath + '\n\nIt may have been moved or deleted. It was removed from the recent files list.'
     });
-    if (canceled) return null;
-    target = chosen;
+    return null;
   }
-  fs.writeFileSync(target, content, 'utf-8');
-  return { filePath: target };
+});
+
+/* Save. If the remembered path (e.g. restored from the last session's cache)
+   can no longer be written — moved, deleted, drive gone — fall back to a
+   Save As dialog instead of failing. */
+ipcMain.handle('file:save', async (_e, { filePath, content }) => {
+  if (filePath) {
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8');
+      addRecent(filePath);
+      return { filePath };
+    } catch (err) { /* fall through to Save As */ }
+  }
+  const { canceled, filePath: chosen } = await dialog.showSaveDialog(win, {
+    filters: FILE_FILTERS,
+    defaultPath: filePath || 'document.html'
+  });
+  if (canceled) return null;
+  fs.writeFileSync(chosen, content, 'utf-8');
+  addRecent(chosen);
+  return { filePath: chosen };
 });
 
 ipcMain.handle('file:saveAs', async (_e, { content, defaultName }) => {
@@ -173,6 +238,7 @@ ipcMain.handle('file:saveAs', async (_e, { content, defaultName }) => {
   });
   if (canceled) return null;
   fs.writeFileSync(chosen, content, 'utf-8');
+  addRecent(chosen);
   return { filePath: chosen };
 });
 
