@@ -103,6 +103,7 @@ body {
 }
 #toolbar button:hover { background: var(--btn-hover-bg); border-color: var(--border); color: var(--ink); }
 #toolbar button:active { transform: translateY(1px); background: var(--btn-active-bg); }
+#toolbar button.active { background: var(--btn-active-bg); border-color: var(--border); color: var(--ink); }
 #toolbar button svg {
   width: 17px; height: 17px; fill: none;
   stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;

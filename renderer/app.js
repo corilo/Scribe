@@ -52,34 +52,130 @@ document.getElementById('btn-center').onclick = () => cmd('justifyCenter');
 document.getElementById('btn-right').onclick = () => cmd('justifyRight');
 document.getElementById('btn-ul').onclick = () => cmd('insertUnorderedList');
 document.getElementById('btn-ol').onclick = () => cmd('insertOrderedList');
-document.getElementById('sel-block').onchange = e => cmd('formatBlock', '<' + e.target.value + '>');
-
 /* ---------------- Font system ---------------- */
+const selBlock = document.getElementById('sel-block');
 const selFont = document.getElementById('sel-font');
 const selSize = document.getElementById('sel-size');
+const btnB = document.getElementById('btn-bold');
+const btnI = document.getElementById('btn-italic');
+const btnU = document.getElementById('btn-under');
 
-selFont.onchange = e => cmd('fontName', e.target.value);
+/* Clicking a toolbar <select> can steal the editor's selection (browser-
+   dependent) — the #1 reason size/font changes "sometimes did nothing".
+   Remember the selection on the way into the dropdown, restore it before
+   applying the command. */
+let savedRange = null;
+function saveSel() {
+  const s = window.getSelection();
+  if (s.rangeCount && editor.contains(s.getRangeAt(0).commonAncestorContainer))
+    savedRange = s.getRangeAt(0).cloneRange();
+}
+function restoreSel() {
+  if (!savedRange) return;
+  const s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(savedRange);
+}
+[selBlock, selFont, selSize].forEach(el => {
+  el.addEventListener('pointerdown', saveSel);
+  el.addEventListener('keydown', saveSel);
+});
 
-/* execCommand fontSize only accepts 1-7; apply size 7 then rewrite to exact px */
-selSize.onchange = e => {
-  const px = parseInt(e.target.value, 10);
-  cmd('fontSize', 7);
-  editor.querySelectorAll('font[size="7"]').forEach(f => {
-    f.removeAttribute('size');
-    f.style.fontSize = px + 'px';
+selBlock.onchange = e => { editor.focus(); restoreSel(); cmd('formatBlock', '<' + e.target.value + '>'); };
+
+/* Remove a conflicting inline style/attribute from every descendant, so the
+   newly applied font/size always wins (nested <font>/<span> used to keep
+   overriding it). */
+function stripInline(root, styleProp, attr) {
+  root.querySelectorAll('*').forEach(el => {
+    if (attr) el.removeAttribute(attr);
+    if (el.style && el.style[styleProp]) el.style[styleProp] = '';
   });
+}
+
+selFont.onchange = e => {
+  const fam = e.target.value;
   editor.focus();
+  restoreSel();
+  document.execCommand('fontName', false, fam);
+  editor.querySelectorAll('font[face]').forEach(f => {
+    if (f.getAttribute('face') !== fam) return;
+    f.removeAttribute('face');
+    f.style.fontFamily = fam;
+    stripInline(f, 'fontFamily', 'face');
+  });
+  saveSel();
+  updateStatus();
 };
 
-/* Reflect the caret/selection's current font + size in the toolbar */
+/* execCommand fontSize only accepts 1-7; apply size 7 then rewrite to exact px.
+   With a collapsed caret the <font size="7"> only appears when typing starts,
+   so normalization also runs from the editor's input handler. */
+let pendingPx = parseInt(selSize.value, 10) || 17;
+function normalizeFontSize() {
+  editor.querySelectorAll('font[size="7"]').forEach(f => {
+    f.removeAttribute('size');
+    f.style.fontSize = pendingPx + 'px';
+    stripInline(f, 'fontSize', 'size');
+  });
+}
+selSize.onchange = e => {
+  pendingPx = parseInt(e.target.value, 10);
+  editor.focus();
+  restoreSel();
+  document.execCommand('fontSize', false, '7');
+  normalizeFontSize();
+  saveSel();
+  updateStatus();
+};
+
+/* Show a value in a <select>, adding a hidden extra option when it isn't
+   one of the presets (e.g. 15px text, or a font not in the list). */
+function reflectValue(sel, value, label) {
+  const custom = sel.querySelector('option[data-custom]');
+  if ([...sel.options].some(o => !o.dataset.custom && o.value === value)) {
+    if (custom) custom.remove();
+    sel.value = value;
+    return;
+  }
+  const opt = custom || sel.appendChild(document.createElement('option'));
+  opt.dataset.custom = '1';
+  opt.value = value;
+  opt.textContent = label;
+  sel.value = value;
+}
+
+/* Reflect the caret/selection's formatting in the toolbar:
+   size, font, paragraph style and B/I/U button states. */
 function syncFontUI(node) {
   const cs = getComputedStyle(node);
   const px = Math.round(parseFloat(cs.fontSize));
-  if ([...selSize.options].some(o => +o.value === px)) selSize.value = px;
-  const fam = cs.fontFamily.split(',')[0].replace(/["']/g, '').trim().toLowerCase();
-  for (const o of selFont.options) {
-    if (o.value.split(',')[0].trim().toLowerCase() === fam) { selFont.value = o.value; break; }
+  reflectValue(selSize, String(px), String(px));
+
+  const fams = cs.fontFamily.split(',').map(f => f.replace(/["']/g, '').trim().toLowerCase());
+  let match = null;
+  outer:
+  for (const fam of fams) {
+    for (const o of selFont.options) {
+      if (o.dataset.custom) continue;
+      if (o.value.split(',')[0].trim().toLowerCase() === fam) { match = o.value; break outer; }
+    }
   }
+  if (match) reflectValue(selFont, match, match);
+  else reflectValue(selFont, cs.fontFamily,
+    fams[0].replace(/(^|\s)\S/g, c => c.toUpperCase()));
+
+  const blk = node.closest('h1,h2,h3,blockquote,p,li,div');
+  if (blk && blk !== editor) {
+    const tag = blk.tagName.toLowerCase();
+    selBlock.value = ['p', 'h1', 'h2', 'h3', 'blockquote'].includes(tag) ? tag : 'p';
+  }
+
+  try {
+    btnB.classList.toggle('active', document.queryCommandState('bold'));
+    btnI.classList.toggle('active', document.queryCommandState('italic'));
+    btnU.classList.toggle('active', document.queryCommandState('underline'));
+  } catch (e) {}
 }
 
 /* ---------------- Theme (dark / light) ---------------- */
@@ -151,6 +247,7 @@ document.getElementById('btn-rtl').onclick = () => setParagraphDir('rtl');
 
 /* New paragraphs get dir=auto so typing Hebrew flips them automatically */
 editor.addEventListener('input', () => {
+  normalizeFontSize(); // size chosen at a collapsed caret materializes on first keystroke
   editor.querySelectorAll('p:not([dir]), div:not([dir]), h1:not([dir]), h2:not([dir]), h3:not([dir])')
     .forEach(el => el.setAttribute('dir', 'auto'));
   dirty = true;
@@ -201,9 +298,7 @@ function extractBody(html) {
   const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
   return m ? m[1] : html;
 }
-async function doOpen() {
-  const r = await window.fileAPI.open();
-  if (!r) return;
+function loadDocument(r) {
   currentFile = r.filePath;
   if (/\.(html?|xhtml)$/i.test(r.filePath)) {
     editor.innerHTML = extractBody(r.content);
@@ -217,12 +312,28 @@ async function doOpen() {
   updateStatus();
   persistDoc(true);
 }
+async function doOpen() {
+  const r = await window.fileAPI.open();
+  if (r) loadDocument(r);
+}
+async function doOpenRecent(filePath) {
+  if (!filePath || !window.fileAPI.openPath) return;
+  if (dirty && !confirm('Discard unsaved changes?')) return;
+  const r = await window.fileAPI.openPath(filePath);
+  if (r) loadDocument(r);
+}
 async function doSave(as) {
   const isTxt = currentFile && /\.txt$/i.test(currentFile);
   const content = isTxt ? editor.innerText : docHtml();
-  const r = as
-    ? await window.fileAPI.saveAs(docHtml(), 'document.html')
-    : await window.fileAPI.save(currentFile, content);
+  let r = null;
+  try {
+    r = as
+      ? await window.fileAPI.saveAs(docHtml(), 'document.html')
+      : await window.fileAPI.save(currentFile, content);
+  } catch (e) {
+    alert('Save failed: ' + (e && e.message ? e.message : e));
+    return;
+  }
   if (!r) return;
   currentFile = r.filePath;
   dirty = false;
@@ -244,9 +355,10 @@ document.getElementById('btn-save').onclick = () => doSave(false);
 
 /* Native application menu (File → New/Open/Save/Save As, Edit → Explain) */
 if (window.fileAPI.onMenu) {
-  window.fileAPI.onMenu(action => {
+  window.fileAPI.onMenu((action, payload) => {
     if (action === 'new') doNew();
     else if (action === 'open') doOpen();
+    else if (action === 'openRecent') doOpenRecent(payload);
     else if (action === 'save') doSave(false);
     else if (action === 'saveAs') doSave(true);
     else if (action === 'explain') explainSelection();
