@@ -44,14 +44,55 @@ Klein, BDB, Strong's and Jastrow included.
 - Built-in Help (<kbd>F1</kbd> or the ? button) lists every shortcut and tip.
 - Hover lookup can be toggled off from the toolbar while you type.
 
+**Toolbar**
+
+- A compact ribbon: New / Open / Save and **Explain** stay visible, while the
+  rest is grouped into three tabs — **Home** (text formatting), **Page**
+  (page size, page breaks, printing) and **Tools** (hover lookup, paste style,
+  theme, help). The tab you last used is remembered.
+
 **Formatting**
 
 - Bold, italic, underline, highlight, headings, quotes, ordered and unordered
   lists, alignment.
 - Font family picker with a dedicated Hebrew group (David, Frank Ruehl, SBL
   Hebrew, Noto Sans Hebrew, Aharoni) alongside general families.
-- Numeric font sizes (10–48 px). The toolbar syncs to show the font and size
-  under the cursor.
+- Font sizes from a preset list (8–144 px) — or type any size from 4 to 400 px
+  straight into the size box. **A▲ / A▼** (and <kbd>Ctrl</kbd>+<kbd>Shift</kbd>
+  +<kbd>&gt;</kbd> / <kbd>&lt;</kbd>) grow and shrink the selection a step at a
+  time. The toolbar syncs to show the font and size under the cursor.
+- Font and size apply to **the whole selection** — a word, a paragraph, several
+  paragraphs or the entire document (<kbd>Ctrl</kbd>+<kbd>A</kbd>). With nothing
+  selected, the choice applies to the next text you type.
+- **Clear formatting** (<kbd>Ctrl</kbd>+<kbd>\\</kbd>) strips fonts, sizes,
+  colours and bold/italic from the selection, leaving the text and its
+  paragraph style intact.
+
+**Pages**
+
+- The document flows onto as many pages as it needs, drawn as real sheets with
+  A4 or Letter geometry — or switch to **Continuous** for one endless page.
+- **Page break** (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) starts a new page; pressing
+  it again on the same line removes the break. Breaks are saved with the
+  document.
+- The status bar shows which page the cursor is on, out of how many.
+- **Print / PDF** button on the Page tab (or <kbd>Ctrl</kbd>+<kbd>P</kbd>)
+  honours the same page breaks, so what you print matches what you see — and
+  always prints on white paper with dark text, even in dark mode.
+- Phones and narrow windows switch to continuous automatically.
+
+**Pasting**
+
+- Choose what happens to formatting when you paste, from the toolbar:
+  **keep formatting**, **match document** (structure only — bold, italics,
+  headings and lists, but the document's own fonts and colours), or
+  **text only**.
+- <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> always pastes plain text; the
+  desktop app also has Edit → Paste Special.
+- A small bar appears right after a paste so you can switch style without
+  pasting again.
+- Pasted markup is sanitised — scripts, styles, event handlers, remote objects
+  and editor junk (`class="MsoNormal"` and friends) never reach the document.
 
 **Appearance**
 
@@ -120,6 +161,11 @@ Deploy `dist/` to any static host:
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save As |
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Explain selection |
 | <kbd>Ctrl</kbd>+<kbd>B</kbd> / <kbd>I</kbd> / <kbd>U</kbd> | Bold / Italic / Underline |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>&gt;</kbd> / <kbd>&lt;</kbd> | Increase / decrease font size |
+| <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Insert / remove a page break |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> | Paste as plain text |
+| <kbd>Ctrl</kbd>+<kbd>\\</kbd> | Clear formatting of the selection |
+| <kbd>Ctrl</kbd>+<kbd>P</kbd> | Print / export as PDF |
 | <kbd>Shift</kbd> + hover | Translate the sentence under the cursor |
 | <kbd>F1</kbd> | Help — shortcuts & tips |
 
@@ -154,7 +200,10 @@ Scribe/
 └── renderer/            Shared by the desktop and web apps
     ├── index.html       Toolbar, editor, side panel, status bar
     ├── styles.css       Themeable styling (light/dark CSS variables)
-    ├── app.js           Editor logic, formatting, hover, session restore
+    ├── app.js           Editor logic, toolbar, hover, files, session restore
+    ├── format.js        Selection-wide font/size/style engine, clear formatting
+    ├── pages.js         Page layout: sheets, automatic and manual page breaks
+    ├── paste.js         Clipboard sanitising and the three paste styles
     ├── dictionary.js    Built-in offline Hebrew/English dictionary
     └── lookup.js        Online lexicon, translation and etymology clients
 ```

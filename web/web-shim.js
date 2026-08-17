@@ -154,6 +154,25 @@
       return { filePath: defaultName || 'document.html' };
     },
 
+    /* Paste Special: Electron reads the clipboard in the main process; in the
+       browser this needs the async Clipboard API (and its permission prompt).
+       Returning null tells the app to fall back to arming the next Ctrl+V. */
+    readClipboard: async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.read) {
+          let html = '', text = '';
+          for (const item of await navigator.clipboard.read()) {
+            if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+            if (item.types.includes('text/plain')) text = await (await item.getType('text/plain')).text();
+          }
+          return { html, text };
+        }
+        if (navigator.clipboard && navigator.clipboard.readText)
+          return { html: '', text: await navigator.clipboard.readText() };
+      } catch (e) { /* denied or unsupported */ }
+      return null;
+    },
+
     // In Electron these come from the native menu; on the web we map the
     // same keyboard shortcuts ourselves.
     onMenu: (cb) => {

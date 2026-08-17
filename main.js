@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, clipboard } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -80,8 +80,18 @@ function createWindow() {
         { role: 'cut', enabled: !!selText },
         { role: 'copy', enabled: !!selText },
         { role: 'paste' },
-        { role: 'pasteAndMatchStyle', label: 'Paste as Plain Text' },
+        {
+          label: 'Paste Special',
+          submenu: [
+            { label: 'Keep Formatting', click: () => sendMenu('paste:keep') },
+            { label: 'Match Document Style', click: () => sendMenu('paste:match') },
+            { label: 'Text Only', click: () => sendMenu('paste:text') }
+          ]
+        },
         { role: 'delete', enabled: !!selText },
+        { type: 'separator' },
+        { label: 'Clear Formatting', enabled: !!selText, click: () => sendMenu('clearFormat') },
+        { label: 'Insert Page Break', click: () => sendMenu('pageBreak') },
         { type: 'separator' },
         { role: 'selectAll' }
       );
@@ -124,6 +134,8 @@ function buildMenu() {
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => sendMenu('save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: () => sendMenu('saveAs') },
         { type: 'separator' },
+        { label: 'Print / Export PDF…', accelerator: 'CmdOrCtrl+P', click: () => sendMenu('print') },
+        { type: 'separator' },
         { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
         ...(isMac ? [] : [{ label: 'Exit', role: 'quit' }])
       ]
@@ -133,7 +145,28 @@ function buildMenu() {
       submenu: [
         { role: 'undo' }, { role: 'redo' },
         { type: 'separator' },
-        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' },
+        {
+          label: 'Paste Special',
+          submenu: [
+            { label: 'Keep Formatting', click: () => sendMenu('paste:keep') },
+            { label: 'Match Document Style', click: () => sendMenu('paste:match') },
+            {
+              label: 'Text Only', accelerator: 'CmdOrCtrl+Shift+V',
+              click: () => sendMenu('paste:text')
+            }
+          ]
+        },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Clear Formatting', accelerator: 'CmdOrCtrl+\\',
+          click: () => sendMenu('clearFormat')
+        },
+        {
+          label: 'Insert Page Break', accelerator: 'CmdOrCtrl+Return',
+          click: () => sendMenu('pageBreak')
+        },
         { type: 'separator' },
         { label: 'Explain Selection', accelerator: 'CmdOrCtrl+E', click: () => sendMenu('explain') }
       ]
@@ -179,6 +212,13 @@ const FILE_FILTERS = [
   { name: 'Plain Text', extensions: ['txt'] },
   { name: 'All Files', extensions: ['*'] }
 ];
+
+/* Paste Special reads the clipboard here — the renderer only ever sees the
+   sanitised result it asked for. */
+ipcMain.handle('clipboard:read', () => ({
+  text: clipboard.readText() || '',
+  html: clipboard.readHTML() || ''
+}));
 
 ipcMain.handle('file:open', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {

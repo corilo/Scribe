@@ -83,16 +83,39 @@ body {
 /* Toolbar */
 #tb-brand { padding-left: 2px; }
 #brand-logo { border-radius: 5px; display: block; }
+/* Ribbon: a constant strip (file actions + tabs + Explain) over one row of
+   controls at a time, so the toolbar stays a fixed, readable size. */
 #toolbar {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 7px 12px;
+  display: flex; flex-direction: column;
   background: var(--toolbar-grad);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
+#tb-main, .tb-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 12px;
+}
+#tb-main { border-bottom: 1px solid var(--border); }
+.tb-row { min-height: 44px; }
 .tb-group { display: flex; align-items: center; gap: 2px; padding: 0 7px; border-right: 1px solid var(--border); }
 .tb-group:last-child { border-right: none; }
 .tb-spacer { flex: 1; }
+.tb-label { font-size: 12px; color: var(--muted); margin-inline-end: 6px; }
+
+/* Tabs */
+.tb-tabs { display: flex; align-items: center; gap: 2px; margin-inline-start: 4px; }
+.tb-tab {
+  height: 28px; padding: 0 13px;
+  border: 1px solid transparent; border-radius: 7px;
+  background: transparent; color: var(--muted);
+  font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.tb-tab:hover { background: var(--btn-hover-bg); color: var(--ink); }
+.tb-tab.active {
+  background: var(--btn-active-bg); border-color: var(--border); color: var(--accent-text);
+}
+.tb-hint { color: var(--muted); font-size: 12px; }
 
 #toolbar button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -112,6 +135,8 @@ body {
 #toolbar button svg .thin { stroke-width: 1.3; }
 #toolbar button svg .hl-bar { stroke: var(--accent2); stroke-width: 2.6; }
 .txtbtn { font-size: 15px !important; font-family: Georgia, serif; }
+/* Buttons that carry a label next to their icon */
+#toolbar button.wide { padding: 0 12px; font-size: 13px; }
 .dirbtn { font-size: 12.5px !important; font-weight: 600; letter-spacing: .02em; }
 .dirbtn svg { width: 14px !important; height: 14px !important; }
 
@@ -133,6 +158,21 @@ body {
   background: var(--select-bg); color: var(--ink); font-size: 13px; cursor: pointer;
 }
 #toolbar select:hover { border-color: var(--select-hover-border); }
+
+/* Font size: a free-text box with presets, plus grow/shrink buttons */
+#toolbar #sel-size {
+  width: 58px; height: 31px; padding: 0 6px;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--select-bg); color: var(--ink);
+  font-family: inherit; font-size: 13px; text-align: center;
+}
+#toolbar #sel-size:hover { border-color: var(--select-hover-border); }
+#toolbar #sel-size:focus { outline: none; border-color: var(--accent); }
+#toolbar button.sizebtn {
+  min-width: 30px; padding: 0 5px;
+  font-family: Georgia, serif; font-size: 14px; line-height: 1;
+}
+#toolbar button.sizebtn span { font-size: 8px; margin-inline-start: 1px; opacity: .8; }
 
 /* Hover-lookup toggle switch */
 .toggle { font-size: 12.5px; display: flex; gap: 7px; align-items: center; cursor: pointer; color: var(--muted); user-select: none; }
@@ -158,14 +198,39 @@ body {
     radial-gradient(ellipse at top, var(--editor-glow), transparent 60%),
     var(--bg);
 }
-#editor {
-  width: 100%; max-width: 820px; min-height: 950px;
+
+/* The paper stack: sheets are drawn behind a single continuous editor, which
+   keeps typing, undo and the caret native while the document still looks —
+   and prints — as separate pages. */
+#paper {
+  --page-w: 794px; --page-h: 1123px; --page-gap: 26px;
+  --page-pad-y: 76px; --page-pad-x: 76px;
+  position: relative;
+  width: var(--page-w); flex: none; align-self: flex-start;
+}
+#page-bg { position: absolute; top: 0; left: 0; right: 0; z-index: 0; pointer-events: none; }
+#page-bg .sheet {
+  height: var(--page-h); margin-bottom: var(--page-gap);
   background: var(--paper);
   border: 1px solid var(--border); border-radius: 6px;
   box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 10px 34px rgba(0,0,0,.13);
-  padding: 68px 76px; outline: none;
+}
+#editor {
+  position: relative; z-index: 1;
+  min-height: var(--page-h);
+  padding: var(--page-pad-y) var(--page-pad-x); outline: none;
   font-size: 17px; line-height: 1.75;
 }
+/* Continuous (no pages) — one endless sheet, used on phones too */
+#paper.flow { width: 100%; max-width: 820px; }
+#paper.flow #editor {
+  min-height: 950px;
+  background: var(--paper);
+  border: 1px solid var(--border); border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 10px 34px rgba(0,0,0,.13);
+}
+/* A block pushed to the top of the next page (margin is set by pages.js) */
+#editor .page-start { break-before: page; }
 #editor p, #editor h1, #editor h2, #editor h3, #editor blockquote { margin: 0 0 .55em; }
 #editor h1, #editor h2, #editor h3 { font-family: Georgia, "Times New Roman", serif; color: var(--heading-ink); }
 #editor blockquote { border-inline-start: 3px solid var(--accent); padding-inline-start: 12px; color: var(--quote-ink); }
@@ -197,6 +262,25 @@ body {
   box-shadow: 0 4px 14px rgba(0,0,0,.28);
 }
 #floatbtn:hover { background: var(--accent-dark); }
+
+/* Paste options chip */
+#paste-chip {
+  position: fixed; z-index: 49; display: flex; align-items: center; gap: 4px;
+  padding: 5px 8px; font-size: 12.5px;
+  background: var(--panel-bg); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+}
+#paste-chip .chip-label { color: var(--muted); margin-inline-end: 2px; }
+#paste-chip button {
+  border: 1px solid transparent; border-radius: 6px;
+  background: transparent; color: var(--btn-ink);
+  padding: 3px 8px; font-size: 12.5px; cursor: pointer;
+}
+#paste-chip button:hover { background: var(--btn-hover-bg); border-color: var(--border); }
+#paste-chip button.active {
+  background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+}
 
 /* Side panel */
 #panel {
@@ -252,6 +336,7 @@ body {
 #st-file { font-weight: 600; color: var(--btn-ink); }
 #st-dirty { color: var(--accent2); font-size: 14px; }
 #st-lang { color: var(--accent-text); font-weight: 600; }
+#st-pages { color: var(--muted); }
 
 /* Help modal */
 #help-overlay {
@@ -302,22 +387,34 @@ body {
 
 /* ---------------- Mobile (phones / small tablets) ---------------- */
 @media (max-width: 700px) {
-  /* Toolbar: one scrollable row instead of wrapping into many */
-  #toolbar {
+  /* Each ribbon row scrolls sideways instead of wrapping into many lines */
+  #tb-main, .tb-row {
     flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding: 6px 8px;
     -webkit-overflow-scrolling: touch; scrollbar-width: none;
   }
-  #toolbar::-webkit-scrollbar { display: none; }
+  #tb-main::-webkit-scrollbar, .tb-row::-webkit-scrollbar { display: none; }
+  .tb-tab { padding: 0 10px; flex-shrink: 0; }
+  #toolbar button.wide span, .tb-label { white-space: nowrap; }
   .tb-group { padding: 0 4px; flex-shrink: 0; }
   .toggle { white-space: nowrap; }
   /* iOS zooms into controls with font-size < 16px — avoid that */
   #toolbar select { font-size: 16px; max-width: 116px; }
+  #toolbar #sel-size { font-size: 16px; width: 52px; }
 
   #editor-wrap { padding: 10px 6px; }
-  #editor {
-    padding: 20px 16px; min-height: 70vh;
+  /* Pages are pointless on a phone: pages.js switches to continuous, and the
+     stylesheet enforces the same look whatever the layout setting says. */
+  #paper, #paper.flow { width: 100%; max-width: none; }
+  #page-bg { display: none; }
+  #paper #editor, #paper.flow #editor {
+    padding: 20px 16px; min-height: 70vh !important;
     font-size: 16px; border-radius: 4px;
+    background: var(--paper);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 10px 34px rgba(0,0,0,.13);
   }
+  #editor .page-start { margin-top: 0 !important; }
+  #paste-chip { max-width: 94vw; flex-wrap: wrap; }
 
   /* Explain panel becomes a bottom sheet */
   #panel {
@@ -331,4 +428,38 @@ body {
   #tooltip { max-width: 92vw; }
   #help-modal { max-width: 96vw; max-height: 88vh; }
   #statusbar { padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ---------------- Print / export to PDF ----------------
+   Real page breaks replace the simulated ones; the browser paginates the
+   rest, so what is printed matches what the sheets show on screen. */
+@media print {
+  @page { margin: 0; }
+  /* Paper is white whatever the screen theme is, so print with the light
+     palette — otherwise dark-theme headings and highlights come out washed
+     out or unreadable on paper. */
+  :root, :root[data-theme="dark"] {
+    --paper: #fff; --ink: #000;
+    --heading-ink: #1d3a52; --quote-ink: #444;
+    --accent: #1f5f8b; --accent2: #b3541e;
+    --border: #bbb; --hl: #fdeec9; --selection: transparent;
+  }
+  html, body { height: auto; background: #fff; }
+  #toolbar, #statusbar, #panel, #tooltip, #floatbtn, #paste-chip, #help-overlay,
+  #page-bg { display: none !important; }
+  #main { display: block; }
+  #editor-wrap { display: block; overflow: visible; padding: 0; background: #fff; }
+  #paper, #paper.flow { width: auto; max-width: none; }
+  #editor, #paper.flow #editor {
+    width: auto; min-height: 0 !important;
+    background: #fff; color: #000;
+    border: none; border-radius: 0; box-shadow: none;
+    padding: var(--page-pad-y) var(--page-pad-x);
+  }
+  /* the on-screen push margin must not leak into the printed page */
+  #editor .page-start { margin-top: 0 !important; break-before: page; page-break-before: always; }
+  /* manual breaks print even in continuous mode, where no sheet is drawn */
+  #editor [data-break="page"] { break-before: page; page-break-before: always; }
+  #editor h1, #editor h2, #editor h3 { break-after: avoid; }
+  #editor p, #editor li, #editor blockquote { orphans: 2; widows: 2; }
 }

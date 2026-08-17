@@ -8,8 +8,12 @@ const panelTitle = document.getElementById('panel-title');
 const stFile = document.getElementById('st-file');
 const stDirty = document.getElementById('st-dirty');
 const stLang = document.getElementById('st-lang');
+const stPages = document.getElementById('st-pages');
 const stCount = document.getElementById('st-count');
 const chkHover = document.getElementById('chk-hover');
+const selLayout = document.getElementById('sel-layout');
+const selPaste = document.getElementById('sel-paste');
+const pageHint = document.getElementById('tb-page-hint');
 
 let currentFile = null;
 let dirty = false;
@@ -26,11 +30,19 @@ const store = {
 let persistTimer = null;
 function persistDoc(now) {
   clearTimeout(persistTimer);
-  const write = () => store.set('scribe-doc', { html: editor.innerHTML, file: currentFile, dirty });
+  // Fmt.cleanHtml() drops the page-layout margins — they are recomputed on load
+  const write = () => store.set('scribe-doc', { html: Fmt.cleanHtml(), file: currentFile, dirty });
   if (now) write(); else persistTimer = setTimeout(write, 400);
 }
 function persistPrefs() {
-  store.set('scribe-prefs', { hover: chkHover.checked });
+  const tab = document.querySelector('.tb-tab.active');
+  store.set('scribe-prefs', {
+    hover: chkHover.checked,
+    // what the user picked — not the mode a narrow window forced on them
+    layout: selLayout.value,
+    paste: PasteMgr.mode(),
+    tab: tab ? tab.dataset.tab : 'home'
+  });
 }
 window.addEventListener('beforeunload', () => persistDoc(true));
 
@@ -42,11 +54,24 @@ function esc(s) {
 }
 
 /* ---------------- Formatting toolbar ---------------- */
-function cmd(name, value) { document.execCommand(name, false, value); editor.focus(); }
+/* Toolbar buttons must not take focus, or the selection they act on is gone
+   before the click handler runs. */
+document.getElementById('toolbar').addEventListener('mousedown', e => {
+  if (e.target.closest('button')) e.preventDefault();
+});
+
+function cmd(name, value) {
+  const r = Fmt.targetRange();
+  if (r) { editor.focus(); Fmt.selectRange(r); }
+  document.execCommand(name, false, value);
+  editor.focus();
+  updateStatus();
+}
 document.getElementById('btn-bold').onclick = () => cmd('bold');
 document.getElementById('btn-italic').onclick = () => cmd('italic');
 document.getElementById('btn-under').onclick = () => cmd('underline');
-document.getElementById('btn-hl').onclick = () => cmd('hiliteColor', '#fdeec9');
+document.getElementById('btn-hl').onclick = () => { Fmt.apply({ backgroundColor: '#fdeec9' }); updateStatus(); };
+document.getElementById('btn-clear').onclick = () => { Fmt.clearFormatting(); markDirty(); updateStatus(); };
 document.getElementById('btn-left').onclick = () => cmd('justifyLeft');
 document.getElementById('btn-center').onclick = () => cmd('justifyCenter');
 document.getElementById('btn-right').onclick = () => cmd('justifyRight');
@@ -60,74 +85,59 @@ const btnB = document.getElementById('btn-bold');
 const btnI = document.getElementById('btn-italic');
 const btnU = document.getElementById('btn-under');
 
-/* Clicking a toolbar <select> can steal the editor's selection (browser-
-   dependent) — the #1 reason size/font changes "sometimes did nothing".
-   Remember the selection on the way into the dropdown, restore it before
-   applying the command. */
-let savedRange = null;
-function saveSel() {
-  const s = window.getSelection();
-  if (s.rangeCount && editor.contains(s.getRangeAt(0).commonAncestorContainer))
-    savedRange = s.getRangeAt(0).cloneRange();
-}
-function restoreSel() {
-  if (!savedRange) return;
-  const s = window.getSelection();
-  s.removeAllRanges();
-  s.addRange(savedRange);
-}
-[selBlock, selFont, selSize].forEach(el => {
-  el.addEventListener('pointerdown', saveSel);
-  el.addEventListener('keydown', saveSel);
-});
-
-selBlock.onchange = e => { editor.focus(); restoreSel(); cmd('formatBlock', '<' + e.target.value + '>'); };
-
-/* Remove a conflicting inline style/attribute from every descendant, so the
-   newly applied font/size always wins (nested <font>/<span> used to keep
-   overriding it). */
-function stripInline(root, styleProp, attr) {
-  root.querySelectorAll('*').forEach(el => {
-    if (attr) el.removeAttribute(attr);
-    if (el.style && el.style[styleProp]) el.style[styleProp] = '';
-  });
-}
+/* Font and size are applied by Fmt to every text node in the selection, so a
+   whole paragraph — or the whole document — changes at once. With no selection
+   the choice is queued for the next characters typed. */
+selBlock.onchange = e => cmd('formatBlock', '<' + e.target.value + '>');
 
 selFont.onchange = e => {
-  const fam = e.target.value;
-  editor.focus();
-  restoreSel();
-  document.execCommand('fontName', false, fam);
-  editor.querySelectorAll('font[face]').forEach(f => {
-    if (f.getAttribute('face') !== fam) return;
-    f.removeAttribute('face');
-    f.style.fontFamily = fam;
-    stripInline(f, 'fontFamily', 'face');
-  });
-  saveSel();
+  Fmt.apply({ fontFamily: e.target.value });
+  markDirty();
   updateStatus();
 };
+/* Sizes offered in the dropdown; any value in between can simply be typed. */
+const SIZE_STEPS = [8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 20, 22, 24, 26, 28, 32,
+  36, 40, 48, 54, 60, 72, 96, 120, 144];
+const MIN_SIZE = 4, MAX_SIZE = 400;
 
-/* execCommand fontSize only accepts 1-7; apply size 7 then rewrite to exact px.
-   With a collapsed caret the <font size="7"> only appears when typing starts,
-   so normalization also runs from the editor's input handler. */
-let pendingPx = parseInt(selSize.value, 10) || 17;
-function normalizeFontSize() {
-  editor.querySelectorAll('font[size="7"]').forEach(f => {
-    f.removeAttribute('size');
-    f.style.fontSize = pendingPx + 'px';
-    stripInline(f, 'fontSize', 'size');
-  });
-}
-selSize.onchange = e => {
-  pendingPx = parseInt(e.target.value, 10);
-  editor.focus();
-  restoreSel();
-  document.execCommand('fontSize', false, '7');
-  normalizeFontSize();
-  saveSel();
+function applySize(px) {
+  if (!isFinite(px) || px <= 0) {           // typed something that isn't a size
+    selSize.value = String(currentSizePx());
+    return;
+  }
+  px = Math.round(Math.min(MAX_SIZE, Math.max(MIN_SIZE, px)));
+  selSize.value = String(px);
+  Fmt.apply({ fontSize: px + 'px' });
+  markDirty();
   updateStatus();
-};
+}
+/* Grow/shrink through the preset ladder, then in steps of ~10% past its ends */
+function stepSize(dir) {
+  const cur = parseFloat(selSize.value) || currentSizePx();
+  const next = dir > 0
+    ? SIZE_STEPS.find(s => s > cur + 0.5)
+    : [...SIZE_STEPS].reverse().find(s => s < cur - 0.5);
+  applySize(next !== undefined ? next : cur + dir * Math.max(2, Math.round(cur * 0.1)));
+}
+function currentSizePx() {
+  const r = Fmt.targetRange();
+  let node = r ? r.startContainer : null;
+  if (node && node.nodeType === 3) node = node.parentElement;
+  return node && editor.contains(node) ? Math.round(parseFloat(getComputedStyle(node).fontSize)) : 17;
+}
+
+selSize.addEventListener('change', () => applySize(parseFloat(selSize.value)));
+selSize.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); applySize(parseFloat(selSize.value)); }
+  // Up/Down arrows nudge the value, like a spinner
+  else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    stepSize(e.key === 'ArrowUp' ? 1 : -1);
+  }
+});
+selSize.addEventListener('focus', () => selSize.select());
+document.getElementById('btn-size-up').onclick = () => stepSize(1);
+document.getElementById('btn-size-down').onclick = () => stepSize(-1);
 
 /* Show a value in a <select>, adding a hidden extra option when it isn't
    one of the presets (e.g. 15px text, or a font not in the list). */
@@ -150,7 +160,8 @@ function reflectValue(sel, value, label) {
 function syncFontUI(node) {
   const cs = getComputedStyle(node);
   const px = Math.round(parseFloat(cs.fontSize));
-  reflectValue(selSize, String(px), String(px));
+  // never fight the user while they are typing a size into the box
+  if (document.activeElement !== selSize) selSize.value = String(px);
 
   const fams = cs.fontFamily.split(',').map(f => f.replace(/["']/g, '').trim().toLowerCase());
   let match = null;
@@ -245,14 +256,20 @@ function setParagraphDir(dir) {
 document.getElementById('btn-ltr').onclick = () => setParagraphDir('ltr');
 document.getElementById('btn-rtl').onclick = () => setParagraphDir('rtl');
 
-/* New paragraphs get dir=auto so typing Hebrew flips them automatically */
-editor.addEventListener('input', () => {
-  normalizeFontSize(); // size chosen at a collapsed caret materializes on first keystroke
-  editor.querySelectorAll('p:not([dir]), div:not([dir]), h1:not([dir]), h2:not([dir]), h3:not([dir])')
-    .forEach(el => el.setAttribute('dir', 'auto'));
+/* Mark the document as edited (used by the toolbar commands too) */
+function markDirty() {
   dirty = true;
   updateStatus();
   persistDoc();
+  Pages.schedule();
+}
+
+/* New paragraphs get dir=auto so typing Hebrew flips them automatically */
+editor.addEventListener('input', () => {
+  Fmt.applyPending(); // font/size chosen at a collapsed caret lands on the first keystroke
+  editor.querySelectorAll('p:not([dir]), div:not([dir]), h1:not([dir]), h2:not([dir]), h3:not([dir])')
+    .forEach(el => el.setAttribute('dir', 'auto'));
+  markDirty();
 });
 
 /* ---------------- Status bar ---------------- */
@@ -263,21 +280,70 @@ function updateStatus() {
   stDirty.textContent = dirty ? '●' : '';
   const sel = window.getSelection();
   if (sel.rangeCount) {
-    let node = sel.getRangeAt(0).startContainer;
+    const range = sel.getRangeAt(0);
+    let node = range.startContainer;
     if (node.nodeType === 3) node = node.parentElement;
     if (node && editor.contains(node)) {
       const blockText = node.textContent || '';
       stLang.textContent = detectLang(blockText) === 'he' ? 'Hebrew · עברית' : 'English';
       syncFontUI(node);
+      if (Pages.isPaged()) stPages.textContent = 'Page ' + Pages.pageOfRange(range) + ' of ' + Pages.count();
     }
+  }
+  if (!Pages.isPaged()) stPages.textContent = '';
+  else if (!stPages.textContent) stPages.textContent = 'Page 1 of ' + Pages.count();
+  updatePageHint();
+}
+
+/* The Page tab explains what the current layout is doing — including the case
+   where pages were asked for but the window is too narrow to show a sheet. */
+function updatePageHint() {
+  if (!pageHint) return;
+  if (Pages.isPaged()) {
+    const n = Pages.count();
+    pageHint.textContent = n + (n === 1 ? ' page' : ' pages') +
+      ' · ' + (Pages.layoutMode() === 'letter' ? 'Letter' : 'A4');
+  } else {
+    pageHint.textContent = selLayout.value === 'flow'
+      ? 'One continuous page'
+      : 'Window too narrow for pages — showing continuous';
   }
 }
 document.addEventListener('selectionchange', updateStatus);
 
+/* ---------------- Ribbon tabs ---------------- */
+const tabs = [...document.querySelectorAll('.tb-tab')];
+const rows = [...document.querySelectorAll('.tb-row')];
+function showTab(name) {
+  if (!tabs.some(t => t.dataset.tab === name)) name = 'home';
+  tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  rows.forEach(r => r.classList.toggle('hidden', r.dataset.tab !== name));
+  Pages.schedule(0);   // the editor moved: its page boundaries did too
+  return name;
+}
+tabs.forEach(t => t.addEventListener('click', () => { showTab(t.dataset.tab); persistPrefs(); }));
+
+/* ---------------- Page layout & paste preferences ---------------- */
+/* Below this the window cannot show a whole sheet (Letter is 816px wide plus
+   the editor's own padding), so pages would only add sideways scrolling —
+   continuous mode is used instead. */
+const PAGED_MIN_WIDTH = 860;
+const narrow = () => window.innerWidth < PAGED_MIN_WIDTH;
+
+selLayout.onchange = () => {
+  Pages.setLayoutMode(narrow() ? 'flow' : selLayout.value);
+  persistPrefs();
+  updateStatus();
+};
+selPaste.onchange = () => { PasteMgr.setMode(selPaste.value); persistPrefs(); };
+
 /* ---------------- Restore previous session ---------------- */
 (function restoreSession() {
-  const prefs = store.get('scribe-prefs');
-  if (prefs && typeof prefs.hover === 'boolean') chkHover.checked = prefs.hover;
+  const prefs = store.get('scribe-prefs') || {};
+  if (typeof prefs.hover === 'boolean') chkHover.checked = prefs.hover;
+  if (prefs.layout) selLayout.value = prefs.layout;
+  if (prefs.paste) selPaste.value = prefs.paste;
+  showTab(prefs.tab || 'home');
   const d = store.get('scribe-doc');
   if (d && typeof d.html === 'string' && d.html.trim()) {
     editor.innerHTML = d.html;
@@ -285,6 +351,25 @@ document.addEventListener('selectionchange', updateStatus);
     dirty = !!d.dirty;
     stFile.textContent = currentFile ? currentFile.split(/[\\/]/).pop() : 'Untitled';
   }
+  Fmt.modernize(editor);
+  Fmt.normalizeBlocks();
+
+  Pages.init({ mode: narrow() ? 'flow' : selLayout.value, onChange: () => updateStatus() });
+  PasteMgr.init({
+    mode: selPaste.value,
+    onChange: () => { markDirty(); Pages.schedule(0); }
+  });
+  /* The window can still be sizing itself while this runs (and the user may
+     rotate a tablet later), so the paged/continuous choice is re-checked
+     rather than decided once. */
+  const reconcileLayout = () => {
+    const want = narrow() ? 'flow' : selLayout.value;
+    if (Pages.layoutMode() !== want) Pages.setLayoutMode(want);
+  };
+  window.addEventListener('resize', reconcileLayout);
+  window.addEventListener('load', reconcileLayout);
+  const mq = window.matchMedia('(max-width: ' + (PAGED_MIN_WIDTH - 1) + 'px)');
+  if (mq.addEventListener) mq.addEventListener('change', reconcileLayout);
 })();
 chkHover.addEventListener('change', persistPrefs);
 updateStatus();
@@ -292,7 +377,7 @@ updateStatus();
 /* ---------------- File operations ---------------- */
 function docHtml() {
   return '<!DOCTYPE html>\n<html><head><meta charset="UTF-8"><title>Scribe Document</title></head><body>\n'
-    + editor.innerHTML + '\n</body></html>';
+    + Fmt.cleanHtml() + '\n</body></html>';
 }
 function extractBody(html) {
   const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
@@ -307,8 +392,11 @@ function loadDocument(r) {
       .map(line => '<p dir="auto">' + esc(line) + '</p>').join('');
   }
   editor.querySelectorAll('p:not([dir])').forEach(el => el.setAttribute('dir', 'auto'));
+  Fmt.modernize(editor);
+  Fmt.normalizeBlocks();
   dirty = false;
   stFile.textContent = r.filePath.split(/[\\/]/).pop();
+  Pages.schedule(0);
   updateStatus();
   persistDoc(true);
 }
@@ -346,12 +434,60 @@ function doNew() {
   editor.innerHTML = '<p dir="auto"><br></p>';
   currentFile = null; dirty = false;
   stFile.textContent = 'Untitled';
+  Fmt.clearPending();
+  Pages.schedule(0);
   updateStatus();
   persistDoc(true);
 }
 document.getElementById('btn-new').onclick = doNew;
 document.getElementById('btn-open').onclick = doOpen;
 document.getElementById('btn-save').onclick = () => doSave(false);
+
+/* ---------------- Page breaks, paste style, printing ---------------- */
+function togglePageBreak() {
+  if (!Pages.removePageBreak()) Pages.insertPageBreak();
+  markDirty();
+}
+document.getElementById('btn-break').onclick = togglePageBreak;
+
+/* Print / export to PDF — the print stylesheet turns the simulated pages into
+   real ones, so the paper matches the screen. */
+function doPrint() {
+  PasteMgr.hideChip();
+  hideTooltip();
+  window.print();
+}
+document.getElementById('btn-print').onclick = doPrint;
+
+/* Paste Special (desktop menu): the clipboard is read in the main process */
+async function pasteAs(how) {
+  const data = window.fileAPI.readClipboard ? await window.fileAPI.readClipboard() : null;
+  // No clipboard access (some browsers) — arm the mode for the next Ctrl+V
+  if (!data) { PasteMgr.force(how); return; }
+  PasteMgr.pasteAs(data, how);
+}
+
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  const k = e.key.toLowerCase();
+  if (k === 'enter' && !e.shiftKey && document.activeElement === editor) {
+    e.preventDefault();
+    togglePageBreak();
+  } else if (k === '\\') {
+    e.preventDefault();
+    Fmt.clearFormatting();
+    markDirty();
+  } else if (k === 'v' && e.shiftKey) {
+    // the browser still performs the paste — it just arrives as plain text
+    PasteMgr.force('text');
+  } else if (e.shiftKey && (e.key === '>' || e.code === 'Period')) {
+    e.preventDefault();
+    stepSize(1);
+  } else if (e.shiftKey && (e.key === '<' || e.code === 'Comma')) {
+    e.preventDefault();
+    stepSize(-1);
+  }
+});
 
 /* Native application menu (File → New/Open/Save/Save As, Edit → Explain) */
 if (window.fileAPI.onMenu) {
@@ -363,6 +499,10 @@ if (window.fileAPI.onMenu) {
     else if (action === 'saveAs') doSave(true);
     else if (action === 'explain') explainSelection();
     else if (action === 'help') toggleHelp();
+    else if (action === 'pageBreak') togglePageBreak();
+    else if (action === 'clearFormat') { Fmt.clearFormatting(); markDirty(); }
+    else if (action === 'print') window.print();
+    else if (action && action.indexOf('paste:') === 0) pasteAs(action.slice(6));
   });
 }
 
